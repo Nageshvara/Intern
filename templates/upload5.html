@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <link rel="stylesheet" href="static/css/styles.css">
+    <title>Image Segmentation</title>
+</head>
+<body>
+    <div>
+        <input type="file" assert="image/*" onchange="upload(this)">
+    </div>
+    <input type="range" min="1" max="255" id="threshold">
+    <script>
+        var canvas = document.createElement("canvas");
+var ctx = canvas.getContext("2d");
+
+function upload(e) {
+  var file = e.files[0];
+
+  var reader = new FileReader();
+
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      process(img, window.innerWidth);
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+class ImageData {
+  constructor(ctx, w, h) {
+    this.ctx = ctx;
+    this.w = w;
+    this.h = h;
+    this.imd = ctx.getImageData(0, 0, w, h);
+  }
+
+  getPixel(x, y) {
+    var i = 4 * (y * this.w + x);
+    var d = this.imd.data;
+    return [d[i], d[i + 1], d[i + 2], d[i + 3]];
+  }
+
+  setPixel(x, y, color) {
+    var i = 4 * (y * this.w + x);
+    var d = this.imd.data;
+    [d[i], d[i + 1], d[i + 2], d[i + 3]] = color;
+  }
+
+  each(callback) {
+    var d = this.imd.data;
+    for (var i = 0; i < d.length; i += 4)
+      callback([d[i], d[i + 1], d[i + 2], d[i + 3]]);
+  }
+
+  map(callback) {
+    var d = this.imd.data;
+    for (var i = 0; i < d.length; i += 4)
+      [d[i], d[i + 1], d[i + 2], d[i + 3]] = callback([
+        d[i],
+        d[i + 1],
+        d[i + 2],
+        d[i + 3]
+      ]);
+  }
+
+  equalColor(c1,c2, threshold = 0){
+    return c1.every((e, i) => Math.abs(e - c2[i]) <= threshold);
+  }
+  
+  floodfill([x, y], threshold, replace) {
+    var targetColor = this.getPixel(x, y);
+    if (this.equalColor(targetColor,replace)) return;
+    var pixels = [];
+    pixels.push([x,y]);
+
+    while (pixels.length > 0) {
+      var a = pixels.pop();
+      if (a[0] < this.w && a[0] > 0 && a[1] < this.h && a[1] > 0) {
+        var current = this.getPixel(a[0], a[1]);
+        if (this.equalColor(current, targetColor,threshold) && !this.equalColor(current, replace)) {
+          this.setPixel(a[0], a[1], replace);
+          pixels.push([a[0] - 1, a[1]]);
+          pixels.push([a[0] + 1, a[1]]);
+          pixels.push([a[0], a[1] - 1]);
+          pixels.push([a[0], a[1] + 1]);
+        }
+      }
+    }
+  }
+
+  updateCanvas() {
+    this.ctx.putImageData(this.imd, 0, 0);
+  }
+}
+
+function process(img, maxWidth) {
+  var width = Math.min(maxWidth,img.width)
+  var aspect = width/img.width;
+  canvas.width = width;
+  canvas.height = img.height*aspect;
+  
+  ctx.drawImage(img, 0, 0, canvas.width,canvas.height);
+  var imageData = new ImageData(ctx, canvas.width, canvas.height);
+
+  canvas.onclick = e => {
+    var repl = [
+      Math.round(Math.random() * 255),
+      Math.round(Math.random() * 255),
+      Math.round(Math.random() * 255),
+      255
+    ];
+    var threshold = document.querySelector("#threshold");
+    imageData.floodfill([e.offsetX, e.offsetY], Number(threshold.value), repl);
+    imageData.updateCanvas();
+  };
+  document.body.appendChild(canvas);
+}
+
+    </script>
+</body>
+</html>
